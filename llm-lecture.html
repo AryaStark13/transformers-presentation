@@ -1,0 +1,990 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>How LLMs Actually Learn</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"/>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500&family=DM+Mono:wght@400;500&family=DM+Serif+Display&display=swap" rel="stylesheet"/>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/reveal.js/5.1.0/reset.min.css"/>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/reveal.js/5.1.0/reveal.min.css"/>
+<style>
+:root {
+  --bg: #0d0d0d;
+  --fg: #e8e4dc;
+  --fg2: #9a9589;
+  --accent: #e07a3a;
+  --accent2: #4a9eff;
+  --border: rgba(255,255,255,0.08);
+  --card: rgba(255,255,255,0.04);
+  --font: 'DM Sans', sans-serif;
+  --mono: 'DM Mono', monospace;
+  --serif: 'DM Serif Display', serif;
+}
+
+.reveal-viewport { background: var(--bg); }
+.reveal { font-family: var(--font); color: var(--fg); }
+.reveal .slides { text-align: left; }
+
+/* ── Typography ── */
+.reveal h1 { font-family: var(--serif); font-size: 2.6em; color: var(--fg); line-height: 1.15; font-weight: 400; }
+.reveal h2 { font-family: var(--font); font-size: 1.5em; font-weight: 500; color: var(--fg); letter-spacing: -0.01em; border-bottom: 1px solid var(--border); padding-bottom: 0.4em; margin-bottom: 0.6em; }
+.reveal h3 { font-family: var(--font); font-size: 1.1em; font-weight: 500; color: var(--accent); text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 0.5em; }
+.reveal p, .reveal li { font-size: 0.82em; line-height: 1.7; color: var(--fg); font-weight: 300; }
+.reveal li { margin-bottom: 0.35em; }
+.reveal strong { font-weight: 500; color: var(--fg); }
+.reveal em { color: var(--accent); font-style: normal; font-weight: 500; }
+.reveal code { font-family: var(--mono); font-size: 0.78em; background: rgba(255,255,255,0.07); padding: 0.15em 0.4em; border-radius: 4px; color: #98d4ff; }
+.reveal pre { background: rgba(255,255,255,0.05); border: 1px solid var(--border); border-radius: 8px; padding: 1em; margin: 0.6em 0; }
+.reveal pre code { background: none; padding: 0; font-size: 0.72em; line-height: 1.6; color: #b8d4f0; }
+
+/* ── Layout helpers ── */
+.cols { display: grid; gap: 2em; }
+.cols-2 { grid-template-columns: 1fr 1fr; }
+.cols-3 { grid-template-columns: 1fr 1fr 1fr; }
+.card { background: var(--card); border: 1px solid var(--border); border-radius: 10px; padding: 1.2em 1.4em; }
+.card h4 { font-size: 0.8em; font-weight: 500; color: var(--fg); margin: 0 0 0.4em; }
+.card p { font-size: 0.72em; color: var(--fg2); margin: 0; line-height: 1.6; }
+
+.tag { display: inline-block; font-family: var(--mono); font-size: 0.62em; padding: 0.2em 0.6em; border-radius: 4px; font-weight: 500; letter-spacing: 0.04em; }
+.tag-orange { background: rgba(224,122,58,0.15); color: var(--accent); border: 1px solid rgba(224,122,58,0.3); }
+.tag-blue { background: rgba(74,158,255,0.12); color: var(--accent2); border: 1px solid rgba(74,158,255,0.25); }
+.tag-gray { background: rgba(255,255,255,0.06); color: var(--fg2); border: 1px solid var(--border); }
+
+.muted { color: var(--fg2) !important; }
+.accent { color: var(--accent) !important; }
+.blue { color: var(--accent2) !important; }
+
+.big-num { font-family: var(--serif); font-size: 2.2em; color: var(--accent); line-height: 1; }
+.big-label { font-size: 0.68em; color: var(--fg2); margin-top: 0.2em; }
+
+/* callout box */
+.callout { border-left: 3px solid var(--accent); padding: 0.7em 1em; background: rgba(224,122,58,0.06); border-radius: 0 8px 8px 0; margin: 0.7em 0; }
+.callout p { margin: 0; font-size: 0.78em; line-height: 1.6; }
+.callout-blue { border-left-color: var(--accent2); background: rgba(74,158,255,0.05); }
+.callout-blue p { color: var(--fg2); }
+
+/* section divider slides */
+.section-slide { display: flex; flex-direction: column; justify-content: center; align-items: center; text-align: center; min-height: 560px; }
+.section-num { font-family: var(--mono); font-size: 0.72em; color: var(--accent); letter-spacing: 0.1em; margin-bottom: 0.5em; }
+
+/* table */
+.reveal table { width: 100%; border-collapse: collapse; font-size: 0.74em; }
+.reveal table th { text-align: left; padding: 0.5em 0.8em; border-bottom: 1px solid var(--border); color: var(--fg2); font-weight: 500; font-size: 0.9em; }
+.reveal table td { padding: 0.5em 0.8em; border-bottom: 1px solid rgba(255,255,255,0.04); }
+.reveal table tr:last-child td { border-bottom: none; }
+
+/* progress dots */
+.slide-meta { position: fixed; bottom: 1.2em; right: 1.8em; font-family: var(--mono); font-size: 0.58em; color: var(--fg2); opacity: 0.5; z-index: 100; }
+
+/* animations */
+.reveal .fragment { opacity: 0; transition: opacity 0.4s; }
+.reveal .fragment.visible { opacity: 1; }
+
+/* SVG diagrams */
+.diagram { width: 100%; margin: 0.6em 0; }
+
+/* formula */
+.formula { font-family: var(--mono); font-size: 0.85em; color: var(--accent2); background: rgba(74,158,255,0.06); border: 1px solid rgba(74,158,255,0.15); padding: 0.5em 1em; border-radius: 6px; text-align: center; margin: 0.5em 0; }
+</style>
+</head>
+<body>
+<div class="reveal">
+<div class="slides">
+
+<!-- ────────────────────────────────────────────
+  SLIDE 1: TITLE
+──────────────────────────────────────────── -->
+<section>
+  <div style="display:flex; flex-direction:column; justify-content:center; align-items:center; text-align:center; min-height:580px;">
+    <h1>How LLMs<br>Actually Learn</h1>
+    <p class="muted" style="margin-top: 0.8em; font-size: 0.75em;">Architecture · Data · Training · Knowledge Updates</p>
+    <div style="margin-top: 2.5em; display: flex; gap: 2.5em;">
+      <div><div class="big-num">4</div><div class="big-label">sections</div></div>
+      <div><div class="big-num">~75</div><div class="big-label">minutes</div></div>
+    </div>
+    <div style="margin-top: 2.5em; display:flex; gap: 1.5em; align-items:center;">
+      <div style="text-align:center;">
+        <p style="font-size:0.7em; color:var(--fg2); margin:0 0 0.2em;">Authors</p>
+        <p style="font-size:0.82em; color:var(--fg); margin:0; font-weight:500;">Arihant Sheth (DJSCE'24) &nbsp;&amp;&nbsp; Claude Sonnet 4.6</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ────────────────────────────────────────────
+  SLIDE 2: AGENDA
+──────────────────────────────────────────── -->
+<section>
+  <h2>What we're covering</h2>
+  <div class="cols cols-2" style="gap: 1em;">
+    <div class="card">
+      <span class="tag tag-gray" style="margin-bottom:0.6em;">01</span>
+      <h4>Architecture</h4>
+      <p>Why attention, not RNNs. The "Strawberry" problem. LayerNorm &amp; skip connections. Loss surfaces.</p>
+    </div>
+    <div class="card">
+      <span class="tag tag-gray" style="margin-bottom:0.6em;">02</span>
+      <h4>Data &amp; Compute</h4>
+      <p>Memory math for 300B params. Where training data comes from. Why Scale AI is a $28B company.</p>
+    </div>
+    <div class="card" style="border-color: rgba(224,122,58,0.3);">
+      <span class="tag tag-orange" style="margin-bottom:0.6em;">03 ★</span>
+      <h4>Training Phases</h4>
+      <p>Pre-training (CLM). SFT. Post-training: RLHF, RLAIF, RLVR. Why RL is hard. Real controversies.</p>
+    </div>
+    <div class="card">
+      <span class="tag tag-gray" style="margin-bottom:0.6em;">04</span>
+      <h4>Knowledge Updates</h4>
+      <p>The cutoff problem. Continuous pre-training. RAG. Long context windows.</p>
+    </div>
+  </div>
+  <div class="callout" style="margin-top: 1em;">
+    <p>Pre-requisites assumed: Neural networks, RNNs/LSTMs, basic Transformer architecture (attention, FFN).</p>
+  </div>
+</section>
+
+<!-- ════════════════════════════════════════════
+  SECTION 1: ARCHITECTURE
+════════════════════════════════════════════ -->
+<section>
+  <div class="section-slide">
+    <p class="section-num">SECTION 01</p>
+    <h1>Architecture</h1>
+    <p class="muted">What actually matters, and why.</p>
+    <img src="assets/decoder-only-transformer.png" alt="Decoder-only Transformer" style="max-height: 300px; margin-top: 1.2em; border-radius: 8px; opacity: 0.9;"/>
+    <p class="muted" style="font-size:0.62em; margin-top:0.5em; font-style:italic;">The Architecture that took the world by storm: Decoder-only Transformers</p>
+  </div>
+</section>
+
+<!-- SLIDE: Attention vs RNN -->
+<section>
+  <h2>Attention vs. RNNs — the key difference</h2>
+  <div class="cols cols-2">
+    <div>
+      <h3>RNN (old way)</h3>
+      <p>Compresses all prior context into a <em>fixed-size hidden state</em> <code>h_t</code>.</p>
+      <ul>
+        <li>To reach token at position 0 from position 1000, the signal must travel through 1000 sequential steps</li>
+        <li>Gradient either <em>vanishes</em> or <em>explodes</em> over long sequences</li>
+        <li>LSTMs help, but bottleneck remains</li>
+      </ul>
+      <div class="callout" style="margin-top:0.8em;">
+        <p>Analogy: passing a sticky note through 1000 people, each one rewrites it.</p>
+      </div>
+      <img src="assets/rnn.webp" alt="RNN diagram" style="width:100%; margin-top:0.8em; border-radius:6px; opacity:0.9;"/>
+    </div>
+    <div>
+      <h3>Attention (new way)</h3>
+      <p>Every token directly attends to every other token.</p>
+      <ul>
+        <li>Distance between any two tokens: <em>O(1)</em></li>
+        <li>Compute cost: <em>O(n²)</em> — the tradeoff</li>
+        <li>No information decay over distance</li>
+        <li>Parallelizable across the sequence — no sequential dependency</li>
+      </ul>
+      <div class="callout callout-blue" style="margin-top:0.8em;">
+        <p>Analogy: the original note is on a whiteboard. Everyone can read it simultaneously.</p>
+      </div>
+      <img src="assets/attn-1.png" alt="Attention diagram" style="width:100%; max-height:400px; object-fit:contain; margin-top:0.8em; border-radius:6px; opacity:0.9;"/>
+    </div>
+  </div>
+</section>
+
+<!-- SLIDE: Why transformers scale -->
+<section>
+  <h2>Why Transformers scale — and RNNs didn't</h2>
+  <div class="cols cols-2" style="align-items:start; gap: 1.5em;">
+    <div>
+      <ul style="margin-top:0.2em;">
+        <li><strong>Parallelism</strong> — the entire sequence is processed at once during training. GPUs love this.</li>
+        <li><strong>No sequential bottleneck</strong> — doubling sequence length doesn't double your gradient path</li>
+        <li><strong>Positional encodings</strong> handle order without requiring sequential processing</li>
+      </ul>
+    </div>
+    <div>
+      <svg viewBox="0 0 320 180" width="100%" class="diagram">
+        <defs>
+          <marker id="arr" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+            <path d="M2 1L8 5L2 9" fill="none" stroke="context-stroke" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+          </marker>
+        </defs>
+        <!-- tokens -->
+        <rect x="10" y="140" width="36" height="24" rx="4" fill="rgba(255,255,255,0.06)" stroke="rgba(255,255,255,0.15)" stroke-width="0.5"/>
+        <text x="28" y="156" text-anchor="middle" font-family="DM Mono" font-size="9" fill="#9a9589">t1</text>
+        <rect x="58" y="140" width="36" height="24" rx="4" fill="rgba(255,255,255,0.06)" stroke="rgba(255,255,255,0.15)" stroke-width="0.5"/>
+        <text x="76" y="156" text-anchor="middle" font-family="DM Mono" font-size="9" fill="#9a9589">t2</text>
+        <rect x="106" y="140" width="36" height="24" rx="4" fill="rgba(224,122,58,0.2)" stroke="rgba(224,122,58,0.5)" stroke-width="0.8"/>
+        <text x="124" y="156" text-anchor="middle" font-family="DM Mono" font-size="9" fill="#e07a3a">t3</text>
+        <rect x="154" y="140" width="36" height="24" rx="4" fill="rgba(255,255,255,0.06)" stroke="rgba(255,255,255,0.15)" stroke-width="0.5"/>
+        <text x="172" y="156" text-anchor="middle" font-family="DM Mono" font-size="9" fill="#9a9589">t4</text>
+        <rect x="202" y="140" width="36" height="24" rx="4" fill="rgba(255,255,255,0.06)" stroke="rgba(255,255,255,0.15)" stroke-width="0.5"/>
+        <text x="220" y="156" text-anchor="middle" font-family="DM Mono" font-size="9" fill="#9a9589">t5</text>
+        <!-- attention lines from t3 -->
+        <line x1="124" y1="140" x2="28" y2="48" stroke="rgba(224,122,58,0.6)" stroke-width="2" marker-end="url(#arr)"/>
+        <line x1="124" y1="140" x2="76" y2="48" stroke="rgba(224,122,58,0.35)" stroke-width="1.2" marker-end="url(#arr)"/>
+        <line x1="124" y1="140" x2="124" y2="48" stroke="rgba(224,122,58,0.8)" stroke-width="3" marker-end="url(#arr)"/>
+        <line x1="124" y1="140" x2="172" y2="48" stroke="rgba(224,122,58,0.2)" stroke-width="0.8" marker-end="url(#arr)"/>
+        <line x1="124" y1="140" x2="220" y2="48" stroke="rgba(224,122,58,0.1)" stroke-width="0.5" marker-end="url(#arr)"/>
+        <!-- output nodes -->
+        <circle cx="28" cy="40" r="14" fill="rgba(255,255,255,0.04)" stroke="rgba(255,255,255,0.12)" stroke-width="0.5"/>
+        <circle cx="76" cy="40" r="14" fill="rgba(255,255,255,0.04)" stroke="rgba(255,255,255,0.12)" stroke-width="0.5"/>
+        <circle cx="124" cy="40" r="14" fill="rgba(224,122,58,0.15)" stroke="rgba(224,122,58,0.4)" stroke-width="0.8"/>
+        <circle cx="172" cy="40" r="14" fill="rgba(255,255,255,0.04)" stroke="rgba(255,255,255,0.12)" stroke-width="0.5"/>
+        <circle cx="220" cy="40" r="14" fill="rgba(255,255,255,0.04)" stroke="rgba(255,255,255,0.12)" stroke-width="0.5"/>
+        <text x="124" y="44" text-anchor="middle" font-family="DM Mono" font-size="8" fill="#e07a3a">t3</text>
+        <text x="252" y="110" font-family="DM Sans" font-size="8" fill="#9a9589">Line weight =</text>
+        <text x="252" y="121" font-family="DM Sans" font-size="8" fill="#9a9589">attention score</text>
+        <text x="124" y="174" text-anchor="middle" font-family="DM Sans" font-size="8" fill="#9a9589">t3 attends to all other tokens directly</text>
+      </svg>
+    </div>
+  </div>
+</section>
+
+<!-- SLIDE: The Strawberry Problem -->
+<section>
+  <h2>Why LLMs can't count the r's in "Strawberry"</h2>
+  <div>
+    <h3>It's a tokenization problem</h3>
+    <p>The model never sees raw characters. It sees <em>tokens</em> — sub-word chunks produced by BPE (Byte-Pair Encoding).</p>
+    <div class="formula" style="margin: 0.6em 0;">"Strawberry" → ["Str", "awberry"]</div>
+    <div class="cols cols-3" style="gap:0.8em; margin: 0.6em 0;">
+      <div class="card">
+        <p>The character sequence is <em>discarded at input</em></p>
+      </div>
+      <div class="card">
+        <p>The model reasons over token embeddings — dense vectors, not characters</p>
+      </div>
+      <div class="card">
+        <p>Counting letters requires reconstructing information that was never preserved</p>
+      </div>
+    </div>
+    <div class="callout" style="margin-bottom:0.6em;">
+      <p><strong>Key insight:</strong> The same model that writes essays, codes, and reasons about philosophy fails at this because of a pre-processing decision made before the model even runs.</p>
+    </div>
+  </div>
+  <div class="callout callout-blue" style="margin-top:0.8em; display:flex; align-items:center; gap:1em;">
+    <a href="https://coder.github.io/ai-tokenizer/" target="_blank" style="font-family:var(--mono); font-size:0.72em; padding:0.35em 0.9em; border-radius:6px; background:rgba(74,158,255,0.12); color:var(--accent2); border:1px solid rgba(74,158,255,0.3); text-decoration:none; white-space:nowrap; letter-spacing:0.04em; transition:background 0.2s;">Try it live ↗</a>
+    <p>See how the tokenizer splits "Strawberry" — and why the model never sees individual characters.</p>
+  </div>
+  <iframe src="https://coder.github.io/ai-tokenizer/" style="width:100%; height:300px; border:1px solid rgba(255,255,255,0.1); border-radius:8px; background:#fff; display:block;" title="AI Tokenizer — try it live"></iframe>
+</section>
+
+<!-- SLIDE: LayerNorm + Skip Connections -->
+<section>
+  <h2>LayerNorm &amp; skip connections — why they exist</h2>
+  <div class="cols cols-2" style="gap:1.5em;">
+    <div>
+      <h3>Skip connections (ResNets, 2015)</h3>
+      <p>Instead of <code>output = F(x)</code>, compute <code>output = F(x) + x</code>.</p>
+      <ul>
+        <li>Gradients have a <em>direct highway</em> back to early layers — no more vanishing</li>
+        <li>The layer only needs to learn the <em>residual</em> (the delta), not the full transform</li>
+        <li>Transformers use this after every attention block and FFN block</li>
+      </ul>
+    </div>
+    <div>
+      <h3>Layer Normalization</h3>
+      <p>Normalizes activations across the <em>feature dimension</em> (not the batch).</p>
+      <ul>
+        <li>Keeps activation scale from drifting across 100+ layers</li>
+        <li>Without it: loss surface is chaotic with sharp ridges (Li et al., 2018)</li>
+        <li>With it: smooth, convex-like loss surface — optimization is tractable</li>
+      </ul>
+    </div>
+  </div>
+  <img src="assets/loss-surface-skip-conn.png" alt="Loss surface with and without skip connections" style="width:100%; max-height:200px; object-fit:contain; margin-top:0.8em; border-radius:8px; opacity:0.95;"/>
+</section>
+
+<!-- ════════════════════════════════════════════
+  SECTION 2: DATA & COMPUTE
+════════════════════════════════════════════ -->
+<section>
+  <div class="section-slide">
+    <p class="section-num">SECTION 02</p>
+    <h1>Data &amp; Compute</h1>
+    <p class="muted">The unsexy part that determines everything.</p>
+  </div>
+</section>
+
+<!-- SLIDE: Memory math -->
+<section>
+  <h2>Memory math: 300B parameter model</h2>
+  <div class="cols cols-2" style="gap:1.5em; align-items:start;">
+    <div>
+      <h3>Inference (serving users)</h3>
+      <table>
+        <tr><th>Component</th><th>Memory</th></tr>
+        <tr><td>Weights (fp16)</td><td><em>600 GB</em></td></tr>
+        <tr><td>KV cache (per request)</td><td>~2–8 GB</td></tr>
+        <tr><td><strong>Minimum GPUs</strong></td><td><strong>~8× H100</strong></td></tr>
+      </table>
+      <p class="muted" style="margin-top:0.5em; font-size:0.68em;">300B params × 2 bytes (fp16) = 600 GB</p>
+    </div>
+    <div>
+      <h3>Training (one-time)</h3>
+      <table>
+        <tr><th>Component</th><th>Memory</th></tr>
+        <tr><td>Weights</td><td>600 GB</td></tr>
+        <tr><td>Gradients</td><td>600 GB</td></tr>
+        <tr><td>Adam optimizer states</td><td><em>~1.2 TB</em></td></tr>
+        <tr><td>Activations (backprop)</td><td>~500 GB+</td></tr>
+        <tr><td><strong>Total</strong></td><td><em>~3–4 TB</em></td></tr>
+      </table>
+    </div>
+  </div>
+  <div class="callout" style="margin-top:0.8em;">
+    <p>Training requires <strong>hundreds of A100/H100s</strong> with model + tensor parallelism. Inference can be served on far fewer — this is why pre-training happens once and inference is amortized across millions of users.</p>
+  </div>
+  <div style="text-align:center; margin-top:0.8em;">
+    <img src="assets/computer-burning-gif.gif" alt="Computer burning" style="max-height:140px; border-radius:8px;"/>
+    <p class="muted" style="font-size:0.65em; margin-top:0.3em; font-style:italic;">Me waiting for my model to finish training</p>
+  </div>
+</section>
+<section>
+  <h2>Where the training data comes from</h2>
+  <div class="cols cols-3" style="gap:0.8em;">
+    <div class="card">
+      <h4>Web crawls</h4>
+      <p>Common Crawl — petabyte-scale snapshots of the internet. Heavily filtered (C4, RedPajama, FineWeb). Low quality raw, high quality filtered.</p>
+    </div>
+    <div class="card">
+      <h4>Curated corpora</h4>
+      <p>Books, Wikipedia, academic papers (ArXiv), legal docs, code (GitHub). High quality, limited volume.</p>
+    </div>
+    <div class="card">
+      <h4>Synthetic data</h4>
+      <p>LLM-generated text, reasoning traces, instruction-response pairs. Increasingly important — Phi-3, DeepSeek-R1 trained heavily on synthetic data.</p>
+    </div>
+  </div>
+  <div class="callout callout-blue" style="margin-top:0.8em;">
+    <p><strong>Key principle:</strong> Data quality &gt; data quantity past a certain point. This is why Common Crawl is filtered down from petabytes to hundreds of gigabytes of "clean" tokens before training.</p>
+  </div>
+  <div class="cols cols-2" style="margin-top:0.8em; gap:1em;">
+    <div class="card">
+      <h4>Chinchilla scaling law (Hoffman et al., 2022)</h4>
+      <p>Compute-optimal training: model size and token count should scale together. A 300B model needs ~6 trillion tokens to be compute-optimal — most models were <em>undertrained</em> before this finding.</p>
+    </div>
+    <div class="card">
+      <h4>Data contamination problem</h4>
+      <p>Benchmark test sets (MMLU, HumanEval) exist on the internet → they end up in training data → benchmark scores are inflated. An active research problem.</p>
+    </div>
+  </div>
+  <div style="text-align:center; margin-top:0.8em;">
+    <img src="assets/pre-training-data-gif.gif" alt="Pre-training data" style="max-height:130px; border-radius:8px;"/>
+  </div>
+</section>
+
+<!-- SLIDE: Scale AI / Mercor -->
+<section>
+  <h2>Why Scale AI ($28B) and Mercor exist</h2>
+  <div class="cols cols-2" style="gap:1.5em; align-items:start;">
+    <div>
+      <h3>The bottleneck isn't compute</h3>
+      <p>After pre-training, models need <em>human feedback</em> to become useful assistants. Specifically:</p>
+      <ul>
+        <li>Human raters <strong>ranking</strong> response A vs B (RLHF)</li>
+        <li>Expert annotators <strong>writing demonstrations</strong> of ideal behavior</li>
+        <li>Domain specialists <strong>verifying</strong> medical, legal, math outputs</li>
+        <li>Red-teamers <strong>probing</strong> for failure modes</li>
+      </ul>
+      <div class="callout" style="margin-top:0.8em;">
+        <p>You can't train a model that's <em>better than humans at rating responses</em> if you can't reliably get expert-level ratings at scale.</p>
+      </div>
+    </div>
+    <div>
+      <div class="card" style="margin-bottom:0.8em;">
+        <h4>Scale AI</h4>
+        <p>Operationalizes human labeling at industrial scale. Manages thousands of contractors globally. Provides the labeled datasets that power RLHF for OpenAI, Anthropic, Meta.</p>
+      </div>
+      <div class="card">
+        <h4>Mercor</h4>
+        <p>Matches AI companies with <em>skilled</em> contractors — PhD-level annotators for math, medicine, law. The premium tier of the same market. As models tackle harder domains, the value of domain-expert labelers explodes.</p>
+      </div>
+      <p class="muted" style="font-size:0.65em; margin-top:0.6em;">The "human in the loop" is not a temporary fix — it's a structural part of how aligned models are built.</p>
+    </div>
+  </div>
+</section>
+
+<!-- ════════════════════════════════════════════
+  SECTION 3: TRAINING PHASES
+════════════════════════════════════════════ -->
+<section>
+  <div class="section-slide">
+    <p class="section-num">SECTION 03 — MAIN EVENT</p>
+    <h1>Training Phases</h1>
+    <p class="muted">Pre-training → SFT → Post-training (RL)</p>
+  </div>
+</section>
+
+<!-- SLIDE: Training overview -->
+<section>
+  <h2>The three-phase pipeline</h2>
+  <svg viewBox="0 0 680 130" width="100%" class="diagram">
+    <defs>
+      <marker id="arr2" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+        <path d="M2 1L8 5L2 9" fill="none" stroke="context-stroke" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+      </marker>
+    </defs>
+    <!-- boxes -->
+    <rect x="10" y="30" width="195" height="70" rx="8" fill="rgba(255,255,255,0.04)" stroke="rgba(255,255,255,0.12)" stroke-width="0.5"/>
+    <text x="107" y="56" text-anchor="middle" font-family="DM Sans" font-size="13" font-weight="500" fill="#e8e4dc">Pre-training</text>
+    <text x="107" y="72" text-anchor="middle" font-family="DM Mono" font-size="9" fill="#9a9589">Causal LM · trillions of tokens</text>
+    <text x="107" y="86" text-anchor="middle" font-family="DM Sans" font-size="9" fill="#9a9589">Learns world knowledge</text>
+
+    <line x1="205" y1="65" x2="235" y2="65" stroke="#9a9589" stroke-width="1" marker-end="url(#arr2)"/>
+
+    <rect x="237" y="30" width="195" height="70" rx="8" fill="rgba(255,255,255,0.04)" stroke="rgba(255,255,255,0.12)" stroke-width="0.5"/>
+    <text x="334" y="56" text-anchor="middle" font-family="DM Sans" font-size="13" font-weight="500" fill="#e8e4dc">SFT / Mid-training</text>
+    <text x="334" y="72" text-anchor="middle" font-family="DM Mono" font-size="9" fill="#9a9589">Instruction pairs · 10k–100k</text>
+    <text x="334" y="86" text-anchor="middle" font-family="DM Sans" font-size="9" fill="#9a9589">Learns to follow instructions</text>
+
+    <line x1="432" y1="65" x2="462" y2="65" stroke="#9a9589" stroke-width="1" marker-end="url(#arr2)"/>
+
+    <rect x="464" y="30" width="206" height="70" rx="8" fill="rgba(224,122,58,0.08)" stroke="rgba(224,122,58,0.35)" stroke-width="0.8"/>
+    <text x="567" y="56" text-anchor="middle" font-family="DM Sans" font-size="13" font-weight="500" fill="#e8e4dc">Post-training (RL)</text>
+    <text x="567" y="72" text-anchor="middle" font-family="DM Mono" font-size="9" fill="#e07a3a">RLHF · RLAIF · RLVR</text>
+    <text x="567" y="86" text-anchor="middle" font-family="DM Sans" font-size="9" fill="#9a9589">Learns to be useful &amp; safe</text>
+
+    <text x="107" y="118" text-anchor="middle" font-family="DM Sans" font-size="8" fill="#9a9589">Capability</text>
+    <text x="334" y="118" text-anchor="middle" font-family="DM Sans" font-size="8" fill="#9a9589">Format</text>
+    <text x="567" y="118" text-anchor="middle" font-family="DM Sans" font-size="8" fill="#e07a3a">Personality + Safety</text>
+  </svg>
+  <div class="cols cols-3" style="gap:0.8em; margin-top:0.4em;">
+    <div class="card">
+      <h4>Cost</h4>
+      <p>$10M–$100M+. Done <strong>once</strong>. GPT-4, Llama 3, Claude 3 took months on thousands of GPUs.</p>
+    </div>
+    <div class="card">
+      <h4>Cost</h4>
+      <p>$10k–$1M. Done periodically with new instruction data.</p>
+    </div>
+    <div class="card" style="border-color: rgba(224,122,58,0.3);">
+      <h4>Cost</h4>
+      <p>$100k–$10M. Iterative. Most models go through multiple rounds.</p>
+    </div>
+  </div>
+</section>
+
+<!-- SLIDE: Pre-training CLM -->
+<section>
+  <h2>Pre-training: Causal Language Modeling</h2>
+  <div class="cols cols-2" style="gap:1.5em; align-items:start;">
+    <div>
+      <h3>The task</h3>
+      <p>Given tokens <code>[t₁, t₂, ..., tₙ₋₁]</code>, predict <code>tₙ</code>.</p>
+      <div class="formula">Loss = −∑ log P(tₙ | t₁...tₙ₋₁)</div>
+      <p>Cross-entropy over the vocabulary at every position. No labels needed — the text itself is the supervision.</p>
+      <div class="callout" style="margin-top:0.8em;">
+        <p>The magic: <em>to predict the next word reliably, the model must learn grammar, facts, reasoning, and world knowledge</em> — all as a side effect of a single objective.</p>
+      </div>
+    </div>
+    <div>
+      <h3>What this model is</h3>
+      <ul>
+        <li>A <strong>completion engine</strong> — not an assistant</li>
+        <li>Will complete <em>"How do I make a bomb?"</em> as naturally as <em>"The capital of France is"</em></li>
+        <li>Has no concept of "helpful" or "safe" — just "what comes next"</li>
+        <li>Knows an enormous amount about the world — buried in its weights</li>
+      </ul>
+      <div class="callout callout-blue" style="margin-top:0.8em;">
+        <p><strong>Chinchilla law (2022):</strong> A 300B model is <em>compute-optimal</em> at ~6T tokens. Most early GPT models were significantly undertrained — we were wasting compute on bigger models instead of more data.</p>
+      </div>
+    </div>
+  </div>
+  <img src="assets/casual-LM.webp" alt="Causal Language Modeling" style="display:block; margin:0.8em auto 0; max-height:350px; object-fit:contain; border-radius:6px; opacity:0.9;"/>
+  <p class="caption" style="text-align:center; margin-top:0.5em; font-size:0.7em; color:#9a9589; font-style:italic;">Causal Language Modeling</p>
+</section>
+
+<!-- SLIDE: SFT -->
+<section>
+  <h2>SFT: Teaching the model to follow instructions</h2>
+  <div class="cols cols-2" style="gap:1.5em; align-items:start;">
+    <div>
+      <h3>What changes</h3>
+      <p>Fine-tune the pre-trained model on <code>(instruction, ideal response)</code> pairs.</p>
+      <ul>
+        <li><strong>Dataset size:</strong> surprisingly small — 10k–100k high-quality examples often beats millions of noisy ones</li>
+        <li><strong>InstructGPT (OpenAI):</strong> used only ~13k human-written demonstrations to transform GPT-3 into a usable assistant</li>
+        <li><strong>Epochs:</strong> 1–3 max; more causes overfitting on SFT style and format</li>
+      </ul>
+    </div>
+    <div>
+      <h3>What's frozen</h3>
+      <div class="card" style="margin-bottom:0.7em;">
+        <h4>Full SFT</h4>
+        <p>All weights updated. Expensive but highest quality. Used by OpenAI, Anthropic for main models.</p>
+      </div>
+      <div class="card">
+        <h4>LoRA / PEFT (parameter-efficient)</h4>
+        <p>Base weights frozen. Low-rank adapter matrices trained on top. 100× cheaper. Used for domain adaptation, open-source fine-tuning.</p>
+      </div>
+      <div class="callout" style="margin-top:0.7em;">
+        <p><strong>What SFT does NOT do:</strong> it doesn't make the model safer or more aligned. It makes it sound like an assistant — a very different thing.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- SLIDE: RL overview -->
+<section>
+  <h2>Post-training: the three RL approaches</h2>
+  <div class="cols cols-3" style="gap:0.8em;">
+    <div class="card">
+      <span class="tag tag-orange" style="margin-bottom:0.5em;">RLHF</span>
+      <h4>RL from Human Feedback</h4>
+      <p>Humans rank responses A vs B. Train a <em>reward model</em> on these rankings. Use RL to make the LLM maximize the reward model's score.</p>
+      <p style="margin-top:0.5em; color:#9a9589;">Used by: ChatGPT, Claude, Llama</p>
+    </div>
+    <div class="card">
+      <span class="tag tag-blue" style="margin-bottom:0.5em;">RLAIF</span>
+      <h4>RL from AI Feedback</h4>
+      <p>Replace human raters with another AI model generating preference judgments. 10–100× cheaper. Anthropic's <em>Constitutional AI</em> is a variant.</p>
+      <p style="margin-top:0.5em; color:#9a9589;">Used by: Anthropic (CAI), Gemini, Qwen*</p>
+    </div>
+    <div class="card" style="border-color: rgba(74,158,255,0.25);">
+      <span class="tag tag-blue" style="margin-bottom:0.5em;">RLVR</span>
+      <h4>RL with Verifiable Rewards</h4>
+      <p>For tasks with objective correctness — math, code, proofs. No reward model needed: the <em>environment itself</em> provides signal.</p>
+      <p style="margin-top:0.5em; color:#4a9eff;">Used by: o1, o3, DeepSeek-R1</p>
+    </div>
+  </div>
+  <div class="callout" style="margin-top:0.8em;">
+    <p><strong>Why this step defines the product:</strong> Pre-training gives capability. SFT gives format. Post-training gives <em>personality, safety, and usefulness</em>. Claude sounds like Claude, GPT sounds like GPT — because of this step.</p>
+  </div>
+  <div style="text-align:center; margin-top:0.8em;">
+    <img src="assets/basic-rl.png" alt="Basic RL loop" style="max-height:350px; object-fit:contain; border-radius:8px; opacity:0.9;"/>
+    <p class="caption" style="margin-top:0.4em; text-align:center; font-size:0.7em; color:#9a9589; font-style:italic;">The basic Reinforcement Learning loop</p>
+  </div>
+</section>
+<section>
+  <h2>RLHF in detail</h2>
+  <div class="cols cols-2" style="gap:1.5em; align-items:start;">
+    <div>
+      <h3>The pipeline</h3>
+      <svg viewBox="0 0 300 240" width="100%" class="diagram">
+        <defs>
+          <marker id="arr3" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+            <path d="M2 1L8 5L2 9" fill="none" stroke="context-stroke" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+          </marker>
+        </defs>
+        <rect x="60" y="8" width="180" height="36" rx="6" fill="rgba(255,255,255,0.05)" stroke="rgba(255,255,255,0.15)" stroke-width="0.5"/>
+        <text x="150" y="30" text-anchor="middle" font-family="DM Sans" font-size="10" fill="#e8e4dc">SFT model generates responses</text>
+        <line x1="150" y1="44" x2="150" y2="60" stroke="#9a9589" stroke-width="1" marker-end="url(#arr3)"/>
+        <rect x="60" y="62" width="180" height="36" rx="6" fill="rgba(255,255,255,0.05)" stroke="rgba(255,255,255,0.15)" stroke-width="0.5"/>
+        <text x="150" y="84" text-anchor="middle" font-family="DM Sans" font-size="10" fill="#e8e4dc">Humans rank: A &gt; B</text>
+        <line x1="150" y1="98" x2="150" y2="114" stroke="#9a9589" stroke-width="1" marker-end="url(#arr3)"/>
+        <rect x="60" y="116" width="180" height="36" rx="6" fill="rgba(74,158,255,0.08)" stroke="rgba(74,158,255,0.25)" stroke-width="0.5"/>
+        <text x="150" y="138" text-anchor="middle" font-family="DM Sans" font-size="10" fill="#4a9eff">Train reward model on rankings</text>
+        <line x1="150" y1="152" x2="150" y2="168" stroke="#9a9589" stroke-width="1" marker-end="url(#arr3)"/>
+        <rect x="60" y="170" width="180" height="36" rx="6" fill="rgba(224,122,58,0.1)" stroke="rgba(224,122,58,0.35)" stroke-width="0.5"/>
+        <text x="150" y="192" text-anchor="middle" font-family="DM Sans" font-size="10" fill="#e07a3a">RL: maximize reward model score</text>
+        <!-- feedback arrow -->
+        <path d="M240 188 Q270 188 270 96 Q270 30 240 30" fill="none" stroke="rgba(255,255,255,0.15)" stroke-width="0.8" stroke-dasharray="4 3" marker-end="url(#arr3)"/>
+        <text x="275" y="112" font-family="DM Sans" font-size="8" fill="#9a9589">iterate</text>
+      </svg>
+    </div>
+    <div>
+      <h3>What the reward model learns</h3>
+      <ul>
+        <li>A proxy for "what humans prefer" — not ground truth</li>
+        <li>Trained on human pairwise rankings, not absolute scores</li>
+        <li>Must generalize to outputs it's never seen — this is where it can fail</li>
+      </ul>
+      <div class="callout" style="margin-top:0.7em;">
+        <p><strong>KL penalty:</strong> during RL, the model is penalized for drifting too far from the SFT distribution. Without this, the model degenerates — it learns to game the reward model rather than actually improve.</p>
+      </div>
+      <div class="callout callout-blue" style="margin-top:0.7em;">
+        <p><strong>RLAIF variant:</strong> Replace human raters with a stronger AI. Anthropic's Constitutional AI uses a set of written principles — the AI critiques itself against those principles rather than asking humans each time.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- SLIDE: The Qwen controversy -->
+<section>
+  <h2>RLAIF &amp; the data sourcing controversy</h2>
+  <div class="cols cols-2" style="gap:1.5em; align-items:start;">
+    <div>
+      <h3>The allegation</h3>
+      <p>Multiple reports (2024–2025) alleged that Qwen, DeepSeek, and other Chinese labs generated synthetic training data by:</p>
+      <ul>
+        <li>Querying <em>Claude/GPT-4</em> with thousands of prompts</li>
+        <li>Using the responses as <em>demonstrations for SFT</em></li>
+        <li>Using AI judges (Claude/GPT-4) to <em>rank their own model's outputs</em> — RLAIF with a competitor's model as the judge</li>
+      </ul>
+      <div class="callout" style="margin-top:0.8em;">
+        <p>This is explicitly prohibited by Anthropic's and OpenAI's Terms of Service — but enforcement at scale is technically very hard.</p>
+      </div>
+    </div>
+    <div>
+      <h3>Why this matters</h3>
+      <div class="card" style="margin-bottom:0.7em;">
+        <h4>For the companies</h4>
+        <p>Billions spent building RLHF pipelines with human raters. If a competitor can shortcut this by querying your API, your moat shrinks dramatically.</p>
+      </div>
+      <div class="card" style="margin-bottom:0.7em;">
+        <h4>For the field</h4>
+        <p>If models are trained on outputs of other models, bad behaviors can be distilled forward. "Model collapse" is a real concern at scale.</p>
+      </div>
+      <div class="card">
+        <h4>For students / researchers</h4>
+        <p>This shows that <em>the RL feedback signal is the moat</em> — not the architecture, which is largely public. It's the preference data that's proprietary.</p>
+      </div>
+      <div style="text-align:center; margin-top:0.8em;">
+        <img src="assets/anthropic-distillation-attacks.png" alt="Anthropic distillation attacks" style="max-height:250px; border-radius:6px; opacity:0.9;"/>
+        <p class="caption" style="margin-top:0.4em; text-align:center; font-size:0.7em; color:#9a9589; font-style:italic;">
+          Learn more about the 
+          <a href="https://www.anthropic.com/news/detecting-and-preventing-distillation-attacks" target="_blank" style="color:var(--accent2); text-decoration:none;">
+            Anthropic distillation attacks ⤴
+          </a>
+        </p>
+      </div>
+    </div>
+  </div>
+</section>
+<section>
+  <h2>RLVR: RL with Verifiable Rewards</h2>
+  <div class="cols cols-2" style="gap:1.5em; align-items:start;">
+    <div>
+      <h3>The key insight</h3>
+      <p>For certain domains, you don't need a reward model — <em>the environment verifies correctness automatically.</em></p>
+      <ul>
+        <li><strong>Math:</strong> does the final answer match? (can be checked symbolically)</li>
+        <li><strong>Code:</strong> does it compile? Do unit tests pass?</li>
+        <li><strong>Formal proofs:</strong> does the proof checker accept it?</li>
+      </ul>
+      <div class="callout" style="margin-top:0.8em;">
+        <p>No reward model → no reward hacking. The signal is <em>ground truth</em>, not a proxy trained on human preferences.</p>
+      </div>
+    </div>
+    <div>
+      <h3>Why this is the frontier</h3>
+      <div class="card" style="margin-bottom:0.7em;">
+        <h4>o1 / o3 (OpenAI)</h4>
+        <p>Trained with RLVR to produce long internal "chains of thought" before answering. The model learns to <em>reason</em> not from human demonstrations but from whether its final answer is correct.</p>
+      </div>
+      <div class="card">
+        <h4>DeepSeek-R1</h4>
+        <p>Open-source. Used RLVR on math and coding. Showed that long chain-of-thought reasoning can emerge from RL alone — without supervised reasoning traces. The thinking behavior isn't taught; it's <em>discovered</em>.</p>
+      </div>
+    </div>
+  </div>
+  <img src="assets/rlvr.webp" alt="RLVR diagram" style="width:100%; max-height:350px; object-fit:contain; margin-top:0.8em; border-radius:8px; opacity:0.9;"/>
+  <p class="caption" style="margin-top:0.4em; text-align:center; font-size:0.7em; color:#9a9589; font-style:italic;">RLVR: RL with Verifiable Rewards</p>
+</section>
+<section>
+  <h2>Why RL is hard — 4 core problems</h2>
+  <div class="cols cols-2" style="gap:0.8em;">
+    <div class="card">
+      <span class="tag tag-orange" style="margin-bottom:0.5em;">01</span>
+      <h4>Reward hacking</h4>
+      <p>The model finds a policy that scores high on the reward model without actually being better. Example: verbose responses that <em>appear thorough</em> to human raters but add no real information. The model is optimizing the proxy, not the goal.</p>
+    </div>
+    <div class="card">
+      <span class="tag tag-orange" style="margin-bottom:0.5em;">02</span>
+      <h4>Distribution shift</h4>
+      <p>After RL updates, the model's outputs drift far from the SFT distribution. Without the KL penalty, it can degenerate into repetition, incoherence, or bizarre behaviors. Goodhart's Law: when a measure becomes a target, it ceases to be a good measure.</p>
+    </div>
+    <div class="card">
+      <span class="tag tag-orange" style="margin-bottom:0.5em;">03</span>
+      <h4>Sparse rewards</h4>
+      <p>A response is 500 tokens long. The reward signal is one scalar at the end. Which token caused the reward? Assigning credit across a long sequence is a hard credit assignment problem.</p>
+    </div>
+    <div class="card">
+      <span class="tag tag-orange" style="margin-bottom:0.5em;">04</span>
+      <h4>Reward model collapse</h4>
+      <p>As the LLM improves, it finds failure modes in the reward model that haven't been patched. The reward model was trained on a fixed distribution; the RL'd model is now out-of-distribution for it.</p>
+    </div>
+  </div>
+  <div class="callout callout-blue" style="margin-top:0.8em; display:flex; align-items:center; gap:1em;">
+    <a href="https://openai.com/index/faulty-reward-functions/" target="_blank" style="font-family:var(--mono); font-size:0.72em; padding:0.35em 0.9em; border-radius:6px; background:rgba(74,158,255,0.12); color:var(--accent2); border:1px solid rgba(74,158,255,0.3); text-decoration:none; white-space:nowrap; letter-spacing:0.04em; transition:background 0.2s;">Watch ↗</a>
+    <p>OpenAI — <em>Faulty Reward Functions in the Wild</em> — a boat racing agent that scores higher by going in circles and catching fire than by finishing the race.</p>
+  </div>
+</section>
+
+<!-- ════════════════════════════════════════════
+  SECTION 4: KNOWLEDGE UPDATES
+════════════════════════════════════════════ -->
+<section>
+  <div class="section-slide">
+    <p class="section-num">SECTION 04</p>
+    <h1>Keeping Knowledge Current</h1>
+    <p class="muted">Pre-training is frozen in time. What do you do?</p>
+  </div>
+</section>
+
+<!-- SLIDE: The problem -->
+<section>
+  <h2>The knowledge cutoff problem</h2>
+  <div class="cols cols-2" style="gap:1.5em; align-items:start;">
+    <div>
+      <h3>Why it exists</h3>
+      <ul>
+        <li>Pre-training ingests a <em>static snapshot</em> of the internet at a point in time</li>
+        <li>Knowledge is <strong>crystallized in the weights</strong> — it can't be updated by reading a new article</li>
+        <li>Re-running full pre-training costs $50M+ and takes months</li>
+        <li>The world moves faster than training cycles</li>
+      </ul>
+      <div class="callout" style="margin-top:0.8em;">
+        <p>Ask Claude about something that happened last week and it genuinely doesn't know — not because it forgot, but because the information was never in its training data.</p>
+      </div>
+    </div>
+    <div>
+      <h3>Three strategies</h3>
+      <div class="card" style="margin-bottom:0.6em;">
+        <span class="tag tag-orange" style="margin-bottom:0.4em;">CPT</span>
+        <h4>Continuous Pre-training</h4>
+        <p>Periodic smaller-scale pre-training on new data from a checkpoint. Updates weights with new knowledge.</p>
+      </div>
+      <div class="card" style="margin-bottom:0.6em;">
+        <span class="tag tag-blue" style="margin-bottom:0.4em;">RAG</span>
+        <h4>Retrieval-Augmented Generation</h4>
+        <p>Don't bake it in weights — retrieve at inference time. More practical for fast-changing facts.</p>
+      </div>
+      <div class="card">
+        <span class="tag tag-gray" style="margin-bottom:0.4em;">Context</span>
+        <h4>Long Context / Tool Use</h4>
+        <p>Paste the document in. Give the model a search engine. Knowledge lives outside the model entirely.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- SLIDE: CPT -->
+<section>
+  <h2>Continuous Pre-training (CPT)</h2>
+  <div class="cols cols-2" style="gap:1.5em; align-items:start;">
+    <div>
+      <h3>How it works</h3>
+      <ul>
+        <li>Start from an existing checkpoint (don't retrain from scratch)</li>
+        <li>Run pre-training on <em>new data only</em> at a low learning rate</li>
+        <li>Mix new data with a small replay of old data to limit forgetting</li>
+      </ul>
+      <h3 style="margin-top:0.8em;">Use cases</h3>
+      <ul>
+        <li><strong>Advancing the cutoff:</strong> add 6 months of new web data</li>
+        <li><strong>Domain adaptation:</strong> train a medical LLM by CPT on clinical literature</li>
+        <li><strong>New language:</strong> add a low-resource language to a model trained primarily in English</li>
+      </ul>
+      <h3 style="margin-top:0.8em;">See it in practice</h3>
+      <li>Fine-tuning a language model on <em>US Army Field Manuals</em> — a real CPT + SFT pipeline using UnslothAI &amp; HuggingFace trl. <a href="https://github.com/AryaStark13/us-army-fm-fine-tuning" target="_blank" style="font-family:var(--mono); font-size:0.88em; padding:0.15em 0.55em; border-radius:4px; background:rgba(74,158,255,0.12); color:var(--accent2); border:1px solid rgba(74,158,255,0.3); text-decoration:none; letter-spacing:0.04em;">GitHub: AryaStark13/us-army-fm-fine-tuning</a></li>
+    </div>
+    <div>
+      <div class="callout" style="margin-top:0.2em;">
+        <p><strong>The hard problem:</strong> <em>Catastrophic forgetting.</em> The model overwrites old knowledge while learning new data. Managing the data mixture ratio (new:replay) is the main engineering challenge.</p>
+      </div>
+      <div class="card" style="margin-top:0.8em;">
+        <h4>Real example: LLaMA domain adaptation</h4>
+        <p>Companies like Bloomberg (BloombergGPT), Mistral (finance), and various medical AI labs took a base LLaMA model and ran CPT on domain-specific corpora. Result: much better domain performance without training from scratch.</p>
+      </div>
+      <div class="callout callout-blue" style="margin-top:0.8em;">
+        <p>CPT is significantly cheaper than full pre-training but more expensive than SFT. The tradeoff: deep knowledge integration (CPT/pre-train) vs. surface-level retrieval (RAG) vs. in-context injection (long context).</p>
+      </div>
+    </div>
+  </div>
+  <!-- CPT weight arithmetic diagram: clean two-branch layout -->
+  <svg viewBox="0 0 680 200" width="100%" class="diagram" style="margin-top:0em;">
+    <defs>
+      <marker id="arr-cpt" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+        <path d="M2 1L8 5L2 9" fill="none" stroke="context-stroke" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+      </marker>
+    </defs>
+
+    <!-- Pre-trained box (left) -->
+    <rect x="10" y="72" width="130" height="56" rx="8" fill="rgba(255,255,255,0.05)" stroke="rgba(255,255,255,0.2)" stroke-width="0.5"/>
+    <text x="75" y="96" text-anchor="middle" font-family="DM Sans" font-size="11" font-weight="500" fill="#e8e4dc">Pre-trained</text>
+    <text x="75" y="112" text-anchor="middle" font-family="DM Mono" font-size="9" fill="#9a9589">θ<tspan font-size="7" baseline-shift="sub">PT</tspan></text>
+    <text x="75" y="145" text-anchor="middle" font-family="DM Sans" font-size="8" fill="#9a9589">Base model</text>
+
+    <!-- Top branch arrow: Pre-trained → IT delta -->
+    <path d="M140 85 L200 50" fill="none" stroke="#9a9589" stroke-width="1" marker-end="url(#arr-cpt)"/>
+
+    <!-- IT delta box (top-center) -->
+    <rect x="202" y="18" width="180" height="52" rx="8" fill="rgba(74,158,255,0.08)" stroke="rgba(74,158,255,0.3)" stroke-width="0.5"/>
+    <text x="292" y="38" text-anchor="middle" font-family="DM Sans" font-size="10" font-weight="500" fill="#4a9eff">SFT → Instruction delta</text>
+    <text x="292" y="54" text-anchor="middle" font-family="DM Mono" font-size="9" fill="#4a9eff">Δ<tspan font-size="7" baseline-shift="sub">IT</tspan> = θ<tspan font-size="7" baseline-shift="sub">FT</tspan> − θ<tspan font-size="7" baseline-shift="sub">PT</tspan></text>
+    <text x="292" y="84" text-anchor="middle" font-family="DM Sans" font-size="8" fill="#9a9589">Saved separately</text>
+
+    <!-- Bottom branch arrow: Pre-trained → CPT -->
+    <path d="M140 115 L200 150" fill="none" stroke="#9a9589" stroke-width="1" marker-end="url(#arr-cpt)"/>
+
+    <!-- CPT box (bottom-center) -->
+    <rect x="202" y="130" width="180" height="52" rx="8" fill="rgba(255,255,255,0.05)" stroke="rgba(255,255,255,0.2)" stroke-width="0.5"/>
+    <text x="292" y="152" text-anchor="middle" font-family="DM Sans" font-size="10" font-weight="500" fill="#e8e4dc">CPT on new data</text>
+    <text x="292" y="168" text-anchor="middle" font-family="DM Mono" font-size="9" fill="#9a9589">θ<tspan font-size="7" baseline-shift="sub">CPT</tspan></text>
+    <text x="292" y="196" text-anchor="middle" font-family="DM Sans" font-size="8" fill="#9a9589">New knowledge baked in</text>
+
+    <!-- IT delta → plus circle -->
+    <path d="M382 44 L430 100" fill="none" stroke="rgba(74,158,255,0.6)" stroke-width="1" stroke-dasharray="4 3" marker-end="url(#arr-cpt)"/>
+
+    <!-- CPT → plus circle -->
+    <path d="M382 156 L430 116" fill="none" stroke="#9a9589" stroke-width="1" marker-end="url(#arr-cpt)"/>
+
+    <!-- Plus / merge circle -->
+    <circle cx="452" cy="110" r="20" fill="rgba(224,122,58,0.1)" stroke="rgba(224,122,58,0.45)" stroke-width="0.8"/>
+    <text x="452" y="116" text-anchor="middle" font-family="DM Sans" font-size="20" font-weight="300" fill="#e07a3a">+</text>
+
+    <!-- Plus → final model -->
+    <line x1="472" y1="110" x2="498" y2="110" stroke="rgba(224,122,58,0.9)" stroke-width="1.2" marker-end="url(#arr-cpt)"/>
+
+    <!-- Final model -->
+    <rect x="500" y="72" width="172" height="56" rx="8" fill="rgba(224,122,58,0.1)" stroke="rgba(224,122,58,0.4)" stroke-width="0.8"/>
+    <text x="586" y="96" text-anchor="middle" font-family="DM Sans" font-size="11" font-weight="500" fill="#e8e4dc">Updated model</text>
+    <text x="586" y="112" text-anchor="middle" font-family="DM Mono" font-size="9" fill="#e07a3a">θ<tspan font-size="7" baseline-shift="sub">CPT</tspan> + Δ<tspan font-size="7" baseline-shift="sub">IT</tspan></text>
+    <text x="586" y="145" text-anchor="middle" font-family="DM Sans" font-size="8" fill="#9a9589">New knowledge + instruction following</text>
+  </svg>
+</section>
+
+<!-- SLIDE: Summary -->
+<section>
+  <h2>Summary</h2>
+  <table style="margin-top: 0.3em;">
+    <tr>
+      <th>Phase</th>
+      <th>Objective</th>
+      <th>Data scale</th>
+      <th>What it gives the model</th>
+    </tr>
+    <tr>
+      <td><em>Pre-training</em></td>
+      <td>Next-token prediction</td>
+      <td>Trillions of tokens</td>
+      <td>World knowledge, reasoning, language</td>
+    </tr>
+    <tr>
+      <td><em>SFT</em></td>
+      <td>Instruction following</td>
+      <td>10k–100k pairs</td>
+      <td>Correct format, basic helpfulness</td>
+    </tr>
+    <tr>
+      <td><em>RLHF</em></td>
+      <td>Maximize human preference</td>
+      <td>100k+ comparisons</td>
+      <td>Aligned behavior, personality</td>
+    </tr>
+    <tr>
+      <td><em>RLAIF</em></td>
+      <td>Maximize AI-judge preference</td>
+      <td>Scalable (AI-generated)</td>
+      <td>Safety, constitutional behavior</td>
+    </tr>
+    <tr>
+      <td><em>RLVR</em></td>
+      <td>Maximize verified correctness</td>
+      <td>Env. feedback</td>
+      <td>Deep reasoning, chain-of-thought</td>
+    </tr>
+    <tr>
+      <td><em>CPT</em></td>
+      <td>Next-token prediction (new data)</td>
+      <td>Billions of new tokens</td>
+      <td>Fresh knowledge, domain expertise</td>
+    </tr>
+  </table>
+  <div class="callout" style="margin-top:0.8em;">
+    <p><strong>The mental model:</strong> Pre-training fills the model with knowledge. SFT shapes how it communicates. Post-training (RL) defines who it is. CPT keeps it relevant. Each phase is necessary — none is sufficient alone.</p>
+  </div>
+</section>
+
+<!-- SLIDE: Open questions -->
+<section>
+  <h2>Open questions — things nobody has solved</h2>
+  <div class="cols cols-2" style="gap:0.8em; margin-top:0.2em;">
+    <div class="card">
+      <h4>How do we evaluate reasoning quality?</h4>
+      <p>Chain-of-thought looks convincing but can be entirely post-hoc rationalization. The model may have already decided the answer and then "thought" its way there.</p>
+    </div>
+    <div class="card">
+      <h4>When does RLAIF break?</h4>
+      <p>If you use AI A to train AI B, and AI A has biases, B inherits them — amplified. As models get stronger, self-distillation could propagate failures at scale.</p>
+    </div>
+    <div class="card">
+      <h4>Synthetic data ceilings</h4>
+      <p>Models trained heavily on synthetic data from other models eventually collapse — the distribution narrows over generations. Finding the right real:synthetic ratio is an open research question.</p>
+    </div>
+    <div class="card">
+      <h4>Knowledge vs. reasoning in weights</h4>
+      <p>Can a model learn to reason at pre-training, or does reasoning emerge from RL? DeepSeek-R1 suggests RL — but the pre-trained model's capability is the floor. Still being studied.</p>
+    </div>
+  </div>
+</section>
+
+<!-- SLIDE: Thank you -->
+<section>
+  <div style="padding-top: 1.2em;">
+    <h1 style="font-size:2em;">Questions?</h1>
+    <p class="muted" style="margin-top:0.8em;">Topics we deliberately skipped: evaluation benchmarks, inference optimization (KV caching, speculative decoding, quantization), multi-modal training, agents.</p>
+    <div class="cols cols-2" style="margin-top:1.4em; gap:0.8em;">
+      <div class="card">
+        <h4>Foundations</h4>
+        <p>
+          <a href="https://arxiv.org/abs/1706.03762" target="_blank" style="color:var(--accent2);">Attention Is All You Need</a> — Vaswani et al., 2017<br/>
+          <a href="https://cdn.openai.com/research-covers/language-unsupervised/language_understanding_paper.pdf" target="_blank" style="color:var(--accent2);">GPT-1: Language Understanding</a> — Radford et al., 2018<br/>
+          <a href="https://arxiv.org/abs/1810.04805" target="_blank" style="color:var(--accent2);">BERT</a> — Devlin et al., 2018<br/>
+          <a href="https://arxiv.org/abs/2001.08361" target="_blank" style="color:var(--accent2);">Scaling Laws for Neural LMs</a> — Kaplan et al., 2020
+        </p>
+      </div>
+      <div class="card">
+        <h4>Training &amp; Alignment</h4>
+        <p>
+          <a href="https://arxiv.org/abs/2203.15556" target="_blank" style="color:var(--accent2);">Chinchilla / Training Compute-Optimal LLMs</a> — Hoffmann et al., 2022<br/>
+          <a href="https://arxiv.org/abs/2203.02155" target="_blank" style="color:var(--accent2);">InstructGPT</a> — Ouyang et al., 2022<br/>
+          <a href="https://arxiv.org/abs/2009.01325" target="_blank" style="color:var(--accent2);">Learning to Summarize w/ Human Feedback</a> — Stiennon et al., 2020<br/>
+          <a href="https://arxiv.org/abs/2212.08073" target="_blank" style="color:var(--accent2);">Constitutional AI</a> — Bai et al., 2022
+        </p>
+      </div>
+      <div class="card">
+        <h4>RL Methods</h4>
+        <p>
+          <a href="https://arxiv.org/abs/1707.06347" target="_blank" style="color:var(--accent2);">PPO: Proximal Policy Optimization</a> — Schulman et al., 2017<br/>
+          <a href="https://arxiv.org/abs/2402.03300" target="_blank" style="color:var(--accent2);">DeepSeekMath / GRPO</a> — Shao et al., 2024<br/>
+          <a href="https://arxiv.org/abs/2501.12948" target="_blank" style="color:var(--accent2);">DeepSeek-R1</a> — DeepSeek AI, 2025
+        </p>
+      </div>
+      <div class="card">
+        <h4>Generative Models &amp; Tools</h4>
+        <p>
+          <a href="https://arxiv.org/abs/2006.11239" target="_blank" style="color:var(--accent2);">DDPM: Denoising Diffusion Probabilistic Models</a> — Ho et al., 2020<br/>
+          <a href="https://arxiv.org/abs/2205.11487" target="_blank" style="color:var(--accent2);">Diffusion-LM (text diffusion)</a> — Li et al., 2022<br/>
+          <a href="https://karpathy.ai/zero-to-hero.html" target="_blank" style="color:var(--accent2);">Andrej Karpathy — Zero to Hero</a> (video series)<br/>
+          <a href="https://github.com/karpathy/nanoGPT" target="_blank" style="color:var(--accent2);">nanoGPT</a> — minimal GPT implementation
+        </p>
+      </div>
+    </div>
+    <div class="cols cols-2" style="margin-top:0.8em; gap:0.8em;">
+      <div class="card">
+        <h4>Explore</h4>
+        <p>tiktoken · trl (HuggingFace) · LM Evaluation Harness · vLLM</p>
+      </div>
+      <div class="card">
+        <h4>Watch</h4>
+        <p>Karpathy — "Let's build GPT from scratch" · "State of GPT" (2023) · Ilya Sutskever NeurIPS lectures</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+</div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/reveal.js/5.1.0/reveal.min.js"></script>
+<script>
+Reveal.initialize({
+  hash: true,
+  slideNumber: 'c/t',
+  transition: 'fade',
+  transitionSpeed: 'fast',
+  progress: true,
+  controls: true,
+  center: false,
+  margin: 0.06,
+  width: 1100,
+  height: 680,
+  plugins: []
+});
+</script>
+</body>
+</html>

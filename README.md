@@ -4,7 +4,7 @@ A browser-based lecture presentation built with [Reveal.js](https://revealjs.com
 
 ## Web Presentation URL - Follow Along!
 
-**[AryaStark13.github.io/transformers-presentation](https://AryaStark13.github.io/transformers-presentation)**
+**<a href="https://AryaStark13.github.io/transformers-presentation" target="_blank">AryaStark13.github.io/transformers-presentation</a>**
 
 ---
 
